@@ -50,20 +50,60 @@ def build_prompt(path: dict) -> str:
     path_desc = build_path_description(path)
     hop_count = path['hop_count']
 
-    return f"""You are a biomedical expert creating a medical knowledge benchmark dataset.
+    # Detect which entity types appear so we can give domain-specific guidance
+    node_types = set(v.get('type', '') for v in path['vertices'])
+    edge_types = set(e.get('relation', '') for e in path['edges'])
 
-Given the following knowledge graph path ({hop_count} hops), generate a natural, clinically-relevant question and its answer.
+    domain_hints = []
+    if 'Drug' in node_types and 'Disease' in node_types:
+        domain_hints.append("- Frame the question around pharmacology, treatment options, or therapeutic relationships (e.g. 'Why might a clinician prescribe X for a patient with Y?').")
+    if 'GeneProtein' in node_types and 'Disease' in node_types:
+        domain_hints.append("- Frame the question around genetic basis, molecular mechanisms, or pathophysiology (e.g. 'What molecular mechanism links disease X to phenotype Y?').")
+    if 'EffectPhenotype' in node_types:
+        domain_hints.append("- Frame the question around clinical presentation, symptoms, or adverse effects (e.g. 'Why might a patient on drug X develop symptom Y?').")
+    if 'Pathway' in node_types:
+        domain_hints.append("- Frame the question around biochemical pathways or metabolic processes (e.g. 'Through which metabolic pathway does protein X contribute to condition Y?').")
+    if 'Anatomy' in node_types:
+        domain_hints.append("- Frame the question around anatomical localization or tissue-specific expression (e.g. 'In which tissue is protein X expressed, and how does that relate to disease Y?').")
+    if 'DRUG_EFFECT' in edge_types:
+        domain_hints.append("- Focus on side effects and adverse drug reactions.")
+    if 'OFF_LABEL_USE' in edge_types:
+        domain_hints.append("- Mention off-label therapeutic uses where relevant.")
+    if 'CONTRAINDICATION' in edge_types:
+        domain_hints.append("- Focus on why a drug may be contraindicated for certain conditions.")
+    if not domain_hints:
+        domain_hints.append("- Frame the question around disease classification, differential diagnosis, or nosology (e.g. 'How are these conditions related in the disease taxonomy?').")
+
+    domain_section = "\n".join(domain_hints)
+
+    return f"""You are a senior physician and biomedical researcher writing exam questions for a medical licensing board.
+
+Given the following knowledge graph path ({hop_count} hops), generate a realistic clinical or biomedical question and a clear, concise answer.
 
 Knowledge Graph Path:
 {path_desc}
 
-Requirements:
-1. The question should be natural and sound like something a medical professional, researcher, or student would ask.
-2. The answer MUST be derivable ONLY from the path information provided. Do not add external knowledge.
-3. The answer should be concise (1-3 sentences).
-4. The question should require reasoning across at least {min(hop_count, 3)} hops of the path — do NOT ask simple single-hop factual questions.
-5. Frame the question so that the answer reveals the multi-step relationship chain.
-6. Avoid yes/no questions. Ask "what", "which", "how", or "through what mechanism" questions.
+Domain-specific guidance:
+{domain_section}
+
+STRICT REQUIREMENTS:
+1. Write the question as a REAL MEDICAL QUESTION — the kind found in USMLE, clinical pharmacology exams, or medical board reviews. Do NOT mention "knowledge graph", "path", "hops", "nodes", or "edges".
+2. The question should test clinical reasoning, mechanistic understanding, or therapeutic knowledge — NOT graph traversal.
+3. The answer MUST be grounded in the relationships shown in the path. Do not fabricate information beyond what the path provides.
+4. The answer should be concise (1-3 sentences) and clinically informative.
+5. The question must require multi-step reasoning that spans at least {min(hop_count, 3)} entities in the path.
+6. Avoid yes/no questions. Use "What", "Which", "How", "Why", or "Through what mechanism" question stems.
+7. Do NOT simply list the entities. Instead, ask about the clinical or biological SIGNIFICANCE of their relationships.
+
+GOOD question examples:
+- "Why might a patient with Bernard-Soulier syndrome present with thrombocytopenia, and what gene is implicated?"
+- "Through what molecular pathway could mutations in ACO2 lead to infantile cerebellar-retinal degeneration?"
+- "A patient is prescribed Bumetanide for hypertension. What renal complication should be monitored?"
+
+BAD question examples (DO NOT generate these):
+- "What entities connect Disease A to Drug B?" (graph-speak)
+- "Trace the path from node 1 to node 4." (graph-speak)
+- "What is the relationship between A and B?" (too vague)
 
 Return your response in this EXACT JSON format (no markdown, no code fences):
 {{"question": "your question here", "answer": "your answer here"}}"""
@@ -165,7 +205,7 @@ def main():
 
     print(f"\n Generating QA pairs ({len(paths)} total)...")
 
-    for i in tqdm(range(0, len(paths), BATCH_SIZE), desc="Batches"):
+    for i in tqdm(range(0, 20, BATCH_SIZE), desc="Batches"):
         batch = paths[i:i + BATCH_SIZE]
 
         for path in batch:
@@ -190,7 +230,7 @@ def main():
     # Create DataFrame and save
     df = pd.DataFrame(qa_records)
 
-    output_path = os.path.join(data_dir, 'qa_pairs.csv')
+    output_path = os.path.join(data_dir, 'qa_pairs_new.csv')
     df.to_csv(output_path, index=False, encoding='utf-8')
 
     # Print summary

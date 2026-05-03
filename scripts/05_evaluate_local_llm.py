@@ -3,7 +3,6 @@ Script 05: Evaluate Local LLMs with Reasoning, Latency, and Token Tracking.
 """
 
 import os
-import sys
 import pandas as pd
 import requests
 import json
@@ -11,14 +10,15 @@ import time
 from tqdm import tqdm
 from datetime import datetime
 import re
+from dotenv import load_dotenv
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from scripts.utils import load_env
+# Load environment variables directly from .env file
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+load_dotenv(env_path)
 
 # Configuration
-env = load_env()
-LOCAL_LLM_URL = env['local_llm_url']
-MODEL_NAME = env['local_model_name']
+LOCAL_LLM_URL = os.getenv('LOCAL_LLM_URL', 'http://localhost:11434/v1')
+MODEL_NAME = os.getenv('LOCAL_MODEL_NAME', 'llama3')
 INPUT_FILE = "data/medical_mcqs.csv"
 OUTPUT_DIR = "data/results"
 
@@ -54,7 +54,6 @@ Reasoning:"""
         resp_json = response.json()
         raw_content = resp_json['choices'][0]['message']['content'].strip()
         
-        # Token usage (most local LLM servers provide this in the OpenAI format)
         usage = resp_json.get('usage', {})
         output_tokens = usage.get('completion_tokens', 0)
         latency = end_time - start_time
@@ -85,6 +84,7 @@ def main():
     results = []
     
     print(f"Benchmarking REASONING model '{MODEL_NAME}' on {len(df)} questions...")
+    print(f"Using Server: {LOCAL_LLM_URL}")
 
     for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df))):
         options = {
@@ -100,15 +100,13 @@ def main():
         is_correct = 1 if llm_letter == correct_answer else 0
         status = "✅ CORRECT" if is_correct else f"❌ WRONG (GT: {correct_answer})"
         
-        # Real-time print with latency and tokens
         print(f"\n[{i+1}/{len(df)}] Q: {row['question'][:80]}...")
         print(f"      LLM Choice: {llm_letter} | {status}")
         print(f"      Latency: {latency:.2f}s | Tokens: {tokens}")
         
-        if not is_correct:
-            print(f"\n      --- FULL REASONING ---")
-            print(llm_raw) 
-            print(f"      ----------------------")
+        print(f"\n      --- FULL REASONING ---")
+        print(llm_raw) 
+        print(f"      ----------------------")
 
         results.append({
             'question': row['question'],
@@ -122,13 +120,11 @@ def main():
 
     results_df = pd.DataFrame(results)
     
-    # Save results
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"benchmark_full_data_{MODEL_NAME.replace('/', '_')}_{timestamp}.csv"
     output_path = os.path.join(OUTPUT_DIR, filename)
     results_df.to_csv(output_path, index=False)
     
-    # Summary
     accuracy = results_df['is_correct'].mean() * 100
     avg_latency = results_df['latency_sec'].mean()
     total_tokens = results_df['output_tokens'].sum()

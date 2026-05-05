@@ -1,0 +1,6 @@
+- gemma-2-2b-it : Q8_0
+- gemma-2-9b-it: Q4_K_S
+- unsloth-gemma-3-4b-it: Q4_K_S
+- phi-3-mini: Q4
+- med-alpaca-2-7b: Q6_K
+- llama-3.2-3b-instruct: Q8_0

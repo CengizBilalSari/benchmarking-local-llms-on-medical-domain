@@ -10,11 +10,7 @@ import pandas as pd
 def summarize_file(filepath):
     if not os.path.exists(filepath):
         print(f"Error: File {filepath} not found.")
-        return
-
-    print(f"\n{'='*50}")
-    print(f"📊 REPORT: {os.path.basename(filepath)}")
-    print(f"{'='*50}")
+        return None
 
     df = pd.read_csv(filepath)
     
@@ -33,31 +29,56 @@ def summarize_file(filepath):
     avg_tokens = df['output_tokens'].mean()
     
     # Throughput (Tokens per second)
-    # We calculate this per-row first to get an average speed
     df['tokens_per_sec'] = df['output_tokens'] / df['latency_sec']
     avg_speed = df['tokens_per_sec'].mean()
 
-    print(f"✅ ACCURACY:          {accuracy:.2f}% ({correct_q}/{total_q})")
-    print(f"⏱️  LATENCY (AVG):      {avg_latency:.2f} seconds")
-    print(f"🚀 SPEED (AVG):        {avg_speed:.2f} tokens/sec")
-    print(f"📝 TOKENS (AVG):       {avg_tokens:.1f} per answer")
-    print(f"💎 TOKENS (TOTAL):     {total_tokens:,}")
+    return {
+        "filename": os.path.basename(filepath),
+        "accuracy": accuracy,
+        "correct_q": correct_q,
+        "total_q": total_q,
+        "avg_latency": avg_latency,
+        "avg_speed": avg_speed,
+        "avg_tokens": avg_tokens,
+        "total_tokens": total_tokens
+    }
+
+def print_report(s):
+    print(f"\n{'='*50}")
+    print(f"📊 REPORT: {s['filename']}")
+    print(f"{'='*50}")
+    print(f"✅ ACCURACY:          {s['accuracy']:.2f}% ({s['correct_q']}/{s['total_q']})")
+    print(f"⏱️  LATENCY (AVG):      {s['avg_latency']:.2f} seconds")
+    print(f"🚀 SPEED (AVG):        {s['avg_speed']:.2f} tokens/sec")
+    print(f"📝 TOKENS (AVG):       {s['avg_tokens']:.1f} per answer")
+    print(f"💎 TOKENS (TOTAL):     {s['total_tokens']:,}")
     print(f"{'='*50}\n")
 
 if __name__ == '__main__':
+    results_dir = "data/results"
+    
+    summaries = []
+    
     if len(sys.argv) > 1:
         # Use provided file
-        summarize_file(sys.argv[1])
+        s = summarize_file(sys.argv[1])
+        if s: summaries.append(s)
     else:
-        # Try to find the latest file in data/results
-        results_dir = "data/results"
+        # Summarize all files in data/results
         if os.path.exists(results_dir):
             files = [os.path.join(results_dir, f) for f in os.listdir(results_dir) if f.endswith('.csv')]
-            if files:
-                latest_file = max(files, key=os.path.getctime)
-                print(f"No file specified. Using latest results: {latest_file}")
-                summarize_file(latest_file)
-            else:
-                print("No result files found in data/results/")
+            for f in files:
+                s = summarize_file(f)
+                if s: summaries.append(s)
         else:
-            print("Results directory not found.")
+            print(f"Results directory '{results_dir}' not found.")
+
+    if summaries:
+        # Sort by accuracy high to low
+        summaries.sort(key=lambda x: x['accuracy'], reverse=True)
+        
+        print(f"🔍 Summarizing {len(summaries)} result files (Sorted by Accuracy)\n")
+        for s in summaries:
+            print_report(s)
+    else:
+        print("No results found to summarize.")

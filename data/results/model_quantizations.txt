@@ -7,3 +7,4 @@
 - mistral-7b-instruct-v0.1: Q4_K_M
 - qwen2.5-7b-instruct: Q4_K_M
 - mistral-7b-instruct-v0.3: Q4_K_M
+- openbiollm-llama3-8b: Q4_K_M

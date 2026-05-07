@@ -4,3 +4,4 @@
 - phi-3-mini: Q4
 - med-alpaca-2-7b: Q6_K
 - llama-3.2-3b-instruct: Q8_0
+- mistral-7b-instruct-v0.1: Q4_K_M
